@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Speed tester</title>
+<style>
+:root{--bg:#0a0e1d;--card:#131a33;--text:#eef2ff;--muted:#8a94b8;--a:#22d3ee;--b:#7c3aed;--ok:#34d399;--bad:#f87171;--track:#20294a}
+@media (prefers-color-scheme:light){:root{--bg:#eef2ff;--card:#fff;--text:#1b2144;--muted:#6b7399;--track:#dde3fa}}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+body{min-height:100vh;background:radial-gradient(circle at 50% -10%,rgba(124,58,237,.3),transparent 55%),var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;justify-content:center;padding:max(20px,env(safe-area-inset-top)) 18px 30px}
+.wrap{width:100%;max-width:400px;text-align:center}
+h1{font-size:2.1rem;font-weight:800;background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--muted);font-size:.9rem;margin:6px 0 14px;min-height:1.2em}
+.steps{display:flex;gap:6px;margin-bottom:10px}
+.steps i{flex:1;height:4px;border-radius:4px;background:var(--track);transition:.3s}
+.steps i.on{background:linear-gradient(90deg,var(--a),var(--b))}
+.gauge{position:relative;width:250px;height:250px;margin:0 auto 6px}
+.gauge svg{width:100%;height:100%;transform:rotate(135deg)}
+.track,.bar{fill:none;stroke-width:15;stroke-linecap:round}
+.track{stroke:var(--track)}
+.bar{stroke:url(#g);transition:stroke-dashoffset .25s}
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.num{font-size:3.5rem;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.unit{color:var(--muted);margin-top:8px;letter-spacing:1px;cursor:pointer;padding:4px 10px;border-radius:99px;background:var(--card);font-size:.85rem}
+.lab{font-size:.75rem;color:var(--muted);margin-top:6px}
+canvas{width:100%;height:80px;display:block;margin:6px 0 16px}
+.btns{display:flex;gap:10px;justify-content:center}
+button{border:0;cursor:pointer;color:#fff;font-size:1.05rem;font-weight:700;padding:15px 44px;border-radius:99px;background:linear-gradient(90deg,var(--a),var(--b));box-shadow:0 10px 30px rgba(124,58,237,.4);transition:transform .15s}
+button:active{transform:scale(.96)}
+button.sec{background:var(--card);color:var(--text);box-shadow:none;padding:15px 22px;font-size:1rem}
+button.stop{background:var(--bad);box-shadow:none}
+.pulse{animation:p 1.2s infinite}
+@keyframes p{50%{box-shadow:0 10px 40px rgba(34,211,238,.7)}}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:22px}
+.card{background:var(--card);border-radius:14px;padding:12px 4px}
+.card b{display:block;font-size:1.05rem}
+.card span{color:var(--muted);font-size:.68rem}
+.info{margin-top:14px;color:var(--muted);font-size:.8rem}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
+.chip{background:var(--card);border-radius:99px;padding:7px 12px;font-size:.8rem}
+.chip.y::before{content:"✓ ";color:var(--ok)}.chip.n::before{content:"✗ ";color:var(--bad)}
+.hist{margin-top:22px;text-align:left;background:var(--card);border-radius:16px;padding:12px 14px;display:none}
+.hist h3{font-size:.85rem;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+.hist h3 a{cursor:pointer;color:var(--bad)}
+.row{display:flex;justify-content:space-between;font-size:.82rem;padding:6px 0;border-top:1px solid var(--track);font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Speed tester</h1>
+  <div class="sub" id="sub">Internet tezligingizni o'lchang</div>
+  <div class="steps"><i id="s1"></i><i id="s2"></i><i id="s3"></i></div>
+  <div class="gauge">
+    <svg viewBox="0 0 200 200">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs>
+      <circle class="track" cx="100" cy="100" r="80" stroke-dasharray="377 502.65"/>
+      <circle class="bar" id="bar" cx="100" cy="100" r="80" stroke-dasharray="377 502.65" stroke-dashoffset="377"/>
+    </svg>
+    <div class="center"><div class="num" id="num">0.0</div><div class="unit" id="unit">Mbit/s</div><div class="lab" id="lab"></div></div>
+  </div>
+  <canvas id="cv"></canvas>
+  <div class="btns"><button id="btn">O'lchash</button><button class="sec" id="share" style="display:none">Ulashish</button></div>
+  <div class="stats">
+    <div class="card"><b id="ping">—</b><span>Ping ms</span></div>
+    <div class="card"><b id="jit">—</b><span>Jitter ms</span></div>
+    <div class="card"><b id="dl">—</b><span>Yuklab olish</span></div>
+    <div class="card"><b id="ul">—</b><span>Yuklash</span></div>
+  </div>
+  <div class="info" id="info"></div>
+  <div class="chips" id="chips"></div>
+  <div class="hist" id="hist"><h3><span>Oxirgi natijalar</span><a id="clr">Tozalash</a></h3><div id="rows"></div></div>
+</div>
+<script>
+var DOWN="https://speed.cloudflare.com/__down?bytes=", UP="https://speed.cloudflare.com/__up";
+var DURATION=10000, WARM=1500, MAXV=1000, DLT=6, ULT=4, STEP=200, N=DURATION/STEP;
+var $=function(i){return document.getElementById(i)};
+var shown=0,target=0,animating=false,cancel=false,running=false,unitMB=false,wl=null;
+var R={ping:null,jit:null,dl:null,ul:null}, pts={dl:[],ul:[]};
+var conv=function(v){return unitMB?v/8:v};
+var fmt=function(v){return v>=100?v.toFixed(0):v>=10?v.toFixed(1):v.toFixed(2)};
+
+/* ---------- UI ---------- */
+function animate(){
+  shown+=(target-shown)*0.18;
+  if(Math.abs(target-shown)<0.01)shown=target;
+  $("num").textContent=fmt(conv(shown));
+  $("bar").style.strokeDashoffset=377*(1-Math.min(1,Math.log10(1+shown)/Math.log10(1+MAXV)));
+  if(animating||shown!==target)requestAnimationFrame(animate);
+}
+function cards(){
+  $("ping").textContent=R.ping==null?"—":Math.round(R.ping);
+  $("jit").textContent=R.jit==null?"—":R.jit.toFixed(1);
+  $("dl").textContent=R.dl==null?"—":fmt(conv(R.dl));
+  $("ul").textContent=R.ul==null?"—":fmt(conv(R.ul));
+  $("unit").textContent=unitMB?"MB/s":"Mbit/s";
+}
+function draw(){
+  var cv=$("cv"),d=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+  cv.width=w*d;cv.height=h*d;
+  var c=cv.getContext("2d");c.scale(d,d);c.clearRect(0,0,w,h);
+  var mx=Math.max(10,Math.max.apply(null,pts.dl.concat(pts.ul)))*1.15;
+  function series(a,off,col){
+    if(!a.length)return;
+    var x0=off*w/2,sw=w/2;
+    c.beginPath();c.moveTo(x0,h);
+    a.forEach(function(v,i){c.lineTo(x0+i/(N-1)*sw,h-v/mx*(h-6))});
+    c.lineTo(x0+(a.length-1)/(N-1)*sw,h);c.closePath();
+    var g=c.createLinearGradient(0,0,0,h);g.addColorStop(0,col+"88");g.addColorStop(1,col+"00");
+    c.fillStyle=g;c.fill();
+    c.beginPath();a.forEach(function(v,i){var x=x0+i/(N-1)*sw,y=h-v/mx*(h-6);i?c.lineTo(x,y):c.moveTo(x,y)});
+    c.strokeStyle=col;c.lineWidth=2;c.lineJoin="round";c.stroke();
+  }
+  series(pts.dl,0,"#22d3ee");series(pts.ul,1,"#7c3aed");
+}
+function step(n){["s1","s2","s3"].forEach(function(id,i){$(id).className=i<n?"on":""})}
+
+/* ---------- Server ma'lumoti ---------- */
+async function info(){
+  try{
+    var t=await (await fetch("https://speed.cloudflare.com/cdn-cgi/trace",{cache:"no-store"})).text();
+    var o={};t.split("\n").forEach(function(l){var p=l.split("=");if(p[1])o[p[0]]=p[1]});
+    $("info").textContent="Server: "+(o.colo||"?")+" · Davlat: "+(o.loc||"?")+" · IP: "+(o.ip||"?");
+  }catch(e){}
+}
+
+/* ---------- O'lchovlar ---------- */
+async function measurePing(){
+  var a=[];
+  for(var i=0;i<10&&!cancel;i++){
+    var t=performance.now();
+    await fetch(DOWN+"0&r="+Math.random(),{cache:"no-store"});
+    a.push(performance.now()-t);
+    if(i>0){R.ping=Math.min.apply(null,a.slice(0));cards()}
+  }
+  var s=a.slice().sort(function(x,y){return x-y});
+  var j=0;for(var k=1;k<a.length;k++)j+=Math.abs(a[k]-a[k-1]);
+  R.ping=s[Math.floor(s.length/2)];R.jit=j/Math.max(1,a.length-1);cards();
+}
+function startDownload(){
+  var ac=new AbortController(),total=0,err=0;
+  async function worker(){
+    while(!ac.signal.aborted){
+      try{
+        var r=await fetch(DOWN+"100000000&r="+Math.random(),{cache:"no-store",signal:ac.signal});
+        var rd=r.body.getReader();
+        for(;;){var x=await rd.read();if(x.done)break;total+=x.value.length}
+      }catch(e){if(ac.signal.aborted||++err>10)break}
+    }
+  }
+  for(var i=0;i<DLT;i++)worker();
+  return {get:function(){return total},stop:function(){ac.abort()}};
+}
+function startUpload(){
+  var ch=new Uint8Array(65536);crypto.getRandomValues(ch);
+  var blob=new Blob(new Array(64).fill(ch));
+  var done=0,cur=[],stopped=false,err=0,xs=[];
+  function w(i){
+    if(stopped)return;
+    var x=new XMLHttpRequest();xs[i]=x;
+    x.open("POST",UP+"?r="+Math.random());
+    x.upload.onprogress=function(e){cur[i]=e.loaded};
+    x.onload=function(){done+=blob.size;cur[i]=0;w(i)};
+    x.onerror=function(){cur[i]=0;if(++err<=10)w(i)};
+    x.send(blob);
+  }
+  for(var i=0;i<ULT;i++){cur[i]=0;w(i)}
+  return {
+    get:function(){return done+cur.reduce(function(a,b){return a+(b||0)},0)},
+    stop:function(){stopped=true;xs.forEach(function(x){try{x.abort()}catch(e){}})}
+  };
+}
+function sample(job,arr,onLive){
+  return new Promise(function(res){
+    var t0=performance.now(),sm=[[0,0]],base=null;
+    var iv=setInterval(function(){
+      var t=performance.now()-t0,tot=job.get();
+      sm.push([t,tot]);
+      if(!base&&t>=WARM)base=[t,tot];
+      var s=sm.find(function(x){return x[0]>=t-1500})||sm[0];
+      var live=(tot-s[1])*8/1e6/Math.max((t-s[0])/1000,0.1);
+      if(arr.length<N)arr.push(live);
+      onLive(live);draw();
+      if(t>=DURATION||cancel){
+        clearInterval(iv);job.stop();
+        var f=(base&&t-base[0]>500)?(tot-base[1])*8/1e6/((t-base[0])/1000):tot*8/1e6/Math.max(t/1000,.1);
+        res({speed:f,bytes:tot});
+      }
+    },STEP);
+  });
+}
+
+/* ---------- Sifat baholash ---------- */
+function chips(){
+  var ok=function(c){return c?"chip y":"chip n"};
+  var dl=R.dl||0,ul=R.ul||0,p=R.ping||999,j=R.jit||999;
+  $("chips").innerHTML=
+    '<div class="'+ok(dl>=25)+'">4K video</div>'+
+    '<div class="'+ok(dl>=5&&ul>=3)+'">Video qo\'ng\'iroq</div>'+
+    '<div class="'+ok(p<60&&j<25&&dl>=10)+'">Onlayn o\'yin</div>'+
+    '<div class="'+ok(dl>=100)+'">Tezkor yuklash</div>';
+}
+
+/* ---------- Tarix ---------- */
+function loadH(){try{return JSON.parse(localStorage.getItem("st_hist")||"[]")}catch(e){return[]}}
+function saveH(r){
+  var h=loadH();h.unshift(r);h=h.slice(0,6);
+  try{localStorage.setItem("st_hist",JSON.stringify(h))}catch(e){}
+}
+function showH(){
+  var h=loadH();$("hist").style.display=h.length?"block":"none";
+  $("rows").innerHTML=h.map(function(r){
+    var d=new Date(r.t);
+    return '<div class="row"><span>'+d.toLocaleDateString()+" "+d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})+
+      '</span><span>↓ '+fmt(conv(r.dl))+' ↑ '+fmt(conv(r.ul))+' · '+Math.round(r.ping)+' ms</span></div>';
+  }).join("");
+}
+$("clr").onclick=function(){try{localStorage.removeItem("st_hist")}catch(e){}showH()};
+
+/* ---------- Asosiy oqim ---------- */
+async function start(){
+  if(running){cancel=true;return}
+  running=true;cancel=false;
+  var btn=$("btn");btn.className="stop pulse";btn.textContent="To'xtatish";
+  $("share").style.display="none";
+  R={ping:null,jit:null,dl:null,ul:null};pts={dl:[],ul:[]};cards();draw();
+  shown=0;target=0;animating=true;requestAnimationFrame(animate);
+  try{if(navigator.wakeLock)wl=await navigator.wakeLock.request("screen")}catch(e){}
+  info();
+  try{
+    step(1);$("sub").textContent="Ping o'lchanmoqda";$("lab").textContent="Ping";
+    await measurePing();if(cancel)throw 0;
+
+    step(2);$("sub").textContent="Yuklab olish tezligi o'lchanmoqda";$("lab").textContent="↓ Yuklab olish";
+    var d=await sample(startDownload(),pts.dl,function(v){target=v;R.dl=v;cards()});
+    if(d.bytes===0)throw new Error("net");
+    R.dl=d.speed;cards();if(cancel)throw 0;
+
+    shown=0;target=0;step(3);$("sub").textContent="Yuklash tezligi o'lchanmoqda";$("lab").textContent="↑ Yuklash";
+    var u=await sample(startUpload(),pts.ul,function(v){target=v;R.ul=v;cards()});
+    R.ul=u.speed;cards();
+
+    target=R.dl;$("lab").textContent="↓ Yuklab olish";
+    $("sub").textContent="Tayyor!";
+    saveH({t:Date.now(),dl:R.dl,ul:R.ul,ping:R.ping});
+    chips();showH();$("share").style.display="";
+    if(navigator.vibrate)navigator.vibrate(200);
+  }catch(e){
+    target=0;
+    $("sub").textContent=cancel?"To'xtatildi":"Xatolik: internetga ulanib bo'lmadi";
+    $("lab").textContent="";
+  }
+  step(0);running=false;animating=false;cancel=false;
+  try{if(wl)wl.release()}catch(e){}
+  btn.className="";btn.textContent="Qayta o'lchash";
+  requestAnimationFrame(animate);draw();
+}
+$("btn").onclick=start;
+$("unit").onclick=function(){unitMB=!unitMB;cards();$("num").textContent=fmt(conv(shown));showH()};
+$("share").onclick=function(){
+  var t="Speed tester: ↓ "+fmt(R.dl)+" Mbit/s, ↑ "+fmt(R.ul)+" Mbit/s, ping "+Math.round(R.ping)+" ms";
+  if(navigator.share)navigator.share({text:t}).catch(function(){});
+  else if(navigator.clipboard){navigator.clipboard.writeText(t);$("sub").textContent="Nusxalandi"}
+};
+window.addEventListener("resize",draw);
+showH();draw();
+</script>
+</body>
+</html>
